@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>Queensland Fuel Price Locator</title>
+    <meta http-equiv="Content-Language" content="English" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <style>
+        html, body {height: 100%; margin: 0; padding: 0;}
+        #map {height: 80%; width: 60%;margin: 0 auto; margin-top: 40px;}
+
+    
+    </style>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+</head>
+
+<body>
+
+    <p align="center">
+        <input name="suburb" id="QLDSuburbs" placeholder="Enter a Postcode" type="text" />
+
+        <button id="submit">Submit</button>
+    </p>
+
+    <div id="map"></div>
+
+    <script>
+        var proxy = 'https://cors-anywhere.herokuapp.com/';
+        var sitedetails = {
+            "async": true,
+            "crossDomain": true,
+            "url": proxy + "https://fppdirectapi-prod.fuelpricesqld.com.au/Subscriber/GetFullSiteDetails?countryId=21&geoRegionLevel=3&geoRegionId=1",
+            "method": "GET",
+            "headers": {
+                "Authorization": "FPDAPI SubscriberToken=25B33869-62CA-47C6-8BDA-800AEB66B043",
+                "Content-Type": "application/json",
+                "cache-control": "no-cache",
+            },
+            "processData": false,
+            "data": ""
+        }
+
+        siteprices = {
+            "async": true,
+            "crossDomain": true,
+            "url": proxy + "https://fppdirectapi-prod.fuelpricesqld.com.au/Price/GetSitesPrices?countryId=21&geoRegionLevel=3&geoRegionId=1",
+            "method": "GET",
+            "headers": {
+                "Authorization": "FPDAPI SubscriberToken=25B33869-62CA-47C6-8BDA-800AEB66B043",
+                "Content-Type": "application/json",
+                "cache-control": "no-cache",
+            },
+
+            "data": ""
+        }
+
+
+
+        // create map object and set up the options
+        var myMap;
+
+        function initMap() {
+            myMap = new google.maps.Map(document.getElementById('map'), {
+                center: {
+                    lat: -26.693871,
+                    lng: 153.090645
+                },
+                zoom: 14
+            });
+        }
+
+
+
+        // for query and marker function
+
+        $(document).ready(function() {
+
+            $.ajax(siteprices)
+
+                .done(function(responses) {
+                    var results = responses.SitePrices;
+
+                    $.ajax(sitedetails)
+
+                        .done(function(response) {
+
+                            initMap();
+
+                            var result = response.S;
+
+                            var SiteMergedData = results.map(x => Object.assign(x, result.find(y => y.S == x.SiteId)));
+                            console.log(SiteMergedData);
+
+                            for (var i = 0; i < SiteMergedData.length; i++) {
+                                var xxx = 'SiteId: ' + SiteMergedData[i].SiteId + '<br>';
+                            }
+                            for (var i = 0; i < SiteMergedData.length; i++) {
+                                var lat = SiteMergedData[i].Lat;
+                                var lng = SiteMergedData[i].Lng;
+                                var ttl = SiteMergedData[i].N;
+                                var price = SiteMergedData[i].Price;
+                                var price = SiteMergedData[i].Price;
+                                var latLng = new google.maps.LatLng(lat, lng);
+
+
+                                var marker = new google.maps.Marker({
+                                    position: latLng,
+                                    map: myMap,
+                                    title: ttl + '\n' + '\n' + price
+                                });
+                            }
+                        });
+                });
+
+
+        });
+
+
+        $("#submit").click(function() {
+            var QLDSuburbs = document.getElementById("QLDSuburbs").value;
+
+
+        });
+    </script>
+
+</body>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCO3hE4bE7WV7mGuXL4kn9caoWI44tD8Ic&callback=initMap" async defer></script>
+
+</html>
