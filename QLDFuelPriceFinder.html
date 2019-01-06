@@ -9,7 +9,6 @@
         html, body {height: 100%; margin: 0; padding: 0;}
         #map {height: 80%; width: 60%;margin: 0 auto; margin-top: 40px;}
 
-    
     </style>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
 </head>
@@ -18,7 +17,6 @@
 
     <p align="center">
         <input name="suburb" id="QLDSuburbs" placeholder="Enter a Postcode" type="text" />
-
         <button id="submit">Submit</button>
     </p>
 
@@ -32,33 +30,28 @@
             "url": proxy + "https://fppdirectapi-prod.fuelpricesqld.com.au/Subscriber/GetFullSiteDetails?countryId=21&geoRegionLevel=3&geoRegionId=1",
             "method": "GET",
             "headers": {
-                "Authorization": "FPDAPI SubscriberToken=25B33869-62CA-47C6-8BDA-800AEB66B043",
+                "Authorization": "FPDAPI SubscriberToken=xxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "Content-Type": "application/json",
                 "cache-control": "no-cache",
             },
-            "processData": false,
             "data": ""
         }
 
-        siteprices = {
+        var siteprices = {
             "async": true,
             "crossDomain": true,
             "url": proxy + "https://fppdirectapi-prod.fuelpricesqld.com.au/Price/GetSitesPrices?countryId=21&geoRegionLevel=3&geoRegionId=1",
             "method": "GET",
             "headers": {
-                "Authorization": "FPDAPI SubscriberToken=25B33869-62CA-47C6-8BDA-800AEB66B043",
+                "Authorization": "FPDAPI SubscriberToken=xxxxxxxxxxxxxxxxxxxxxxxxxxx",
                 "Content-Type": "application/json",
                 "cache-control": "no-cache",
             },
-
             "data": ""
         }
 
-
-
         // create map object and set up the options
         var myMap;
-
         function initMap() {
             myMap = new google.maps.Map(document.getElementById('map'), {
                 center: {
@@ -69,58 +62,47 @@
             });
         }
 
-
-
         // for query and marker function
+
+        var resPrices, resDetails, SiteMergedData
+
+        function loadMarkers(resPrices, resDetails) {
+            SiteMergedData = resPrices.map(x => Object.assign(x, resDetails.find(y => y.S == x.SiteId)));
+            initMap();
+            for (var i = 0; i < SiteMergedData.length; i++) {
+                var lat = SiteMergedData[i].Lat;
+                var lng = SiteMergedData[i].Lng;
+                var ttl = SiteMergedData[i].N;
+                var transactiondate = SiteMergedData[i].TransactionDateUtc;
+                var price = SiteMergedData[i].Price;
+                var latLng = new google.maps.LatLng(lat, lng);
+
+                var marker = new google.maps.Marker({
+                    position: latLng,
+                    map: myMap,
+                    title: ttl + '\n' + '\n' + price + '\n' + '\n' + "Price Updated: " + transactiondate
+                });
+            }
+        }
 
         $(document).ready(function() {
 
-            $.ajax(siteprices)
+            // parallel loading
+            $.when($.ajax(sitedetails), $.ajax(siteprices)).done(function( getSiteDetails, getSitePrices ) {
 
-                .done(function(responses) {
-                    var results = responses.SitePrices;
+                // getSiteDetails and getSitePrices are arguments resolved for the first and the second ajax requests, respectively.
+                // Each argument is an array with the following structure: [ data, statusText, jqXHR ]
 
-                    $.ajax(sitedetails)
-
-                        .done(function(response) {
-
-                            initMap();
-
-                            var result = response.S;
-
-                            var SiteMergedData = results.map(x => Object.assign(x, result.find(y => y.S == x.SiteId)));
-                            console.log(SiteMergedData);
-
-                            for (var i = 0; i < SiteMergedData.length; i++) {
-                                var xxx = 'SiteId: ' + SiteMergedData[i].SiteId + '<br>';
-                            }
-                            for (var i = 0; i < SiteMergedData.length; i++) {
-                                var lat = SiteMergedData[i].Lat;
-                                var lng = SiteMergedData[i].Lng;
-                                var ttl = SiteMergedData[i].N;
-                                var price = SiteMergedData[i].Price;
-                                var price = SiteMergedData[i].Price;
-                                var latLng = new google.maps.LatLng(lat, lng);
-
-
-                                var marker = new google.maps.Marker({
-                                    position: latLng,
-                                    map: myMap,
-                                    title: ttl + '\n' + '\n' + price
-                                });
-                            }
-                        });
-                });
-
-
+                if (getSitePrices[1].toString() == 'success' && getSiteDetails[1].toString() == 'success') {
+                    loadMarkers(getSitePrices[0].SitePrices, getSiteDetails[0].S);
+                }
+            });
         });
-
 
         $("#submit").click(function() {
             var QLDSuburbs = document.getElementById("QLDSuburbs").value;
-
-
         });
+
     </script>
 
 </body>
