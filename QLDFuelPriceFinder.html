@@ -1,36 +1,52 @@
 <!doctype html>
 <html>
-
 <head>
     <title>Queensland Fuel Price Locator</title>
     <meta http-equiv="Content-Language" content="English" />
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <style>
-        html, body {height: 100%; margin: 0; padding: 0;}
-        #map {height: 80%; width: 60%;margin: 0 auto; margin-top: 40px;}
-
+        html, body, #map {
+            height: 100%;
+            margin: 0px;
+            padding: 0px
+        }
+        #panel {
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            margin-left: -180px;
+            z-index: 5;
+            background-color: #e9ffcf;
+            padding: 5px;
+            border: 1px solid #999;
+            font-family: 'sans-serif';
+            font-weight: 400;
+        }
     </style>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
 </head>
-
 <body>
-
-    <p align="center">
+    <div id="panel" style="margin-left: -15%">
         <input name="suburb" id="QLDSuburbs" placeholder="Enter a Postcode" type="text" />
-        <button id="submit">Submit</button>
-    </p>
-
+        <button id="submit">Submit</button> &nbsp;
+        <bold>Select Your Fuel:</bold>
+        <select id="fuels">
+            <option value=""> </option>
+        </select>
+    </div>
     <div id="map"></div>
-
     <script>
+
         var proxy = 'https://cors-anywhere.herokuapp.com/';
+        var selectedFuilId, selectedFuelName;
+
         var sitedetails = {
             "async": true,
             "crossDomain": true,
             "url": proxy + "https://fppdirectapi-prod.fuelpricesqld.com.au/Subscriber/GetFullSiteDetails?countryId=21&geoRegionLevel=3&geoRegionId=1",
             "method": "GET",
             "headers": {
-                "Authorization": "FPDAPI SubscriberToken=xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "Authorization": "xxxxxxxxxx",
                 "Content-Type": "application/json",
                 "cache-control": "no-cache",
             },
@@ -43,64 +59,171 @@
             "url": proxy + "https://fppdirectapi-prod.fuelpricesqld.com.au/Price/GetSitesPrices?countryId=21&geoRegionLevel=3&geoRegionId=1",
             "method": "GET",
             "headers": {
-                "Authorization": "FPDAPI SubscriberToken=xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "Authorization": "xxxxxxxxxx",
                 "Content-Type": "application/json",
                 "cache-control": "no-cache",
+            },
+            // filtering data
+            "dataFilter": function(pricesData){
+                var parsed_data = JSON.parse(pricesData);
+                var price_array = parsed_data.SitePrices;
+                var selected_data = [];
+                 $.each(price_array, function(i, item) {
+                    if (item.FuelId == selectedFuilId) {
+                        selected_data.push(item);
+                    };
+                });
+                return JSON.stringify(selected_data);
             },
             "data": ""
         }
 
+        var fueltype = {
+            "async": true,
+            "crossDomain": true,
+            "url": proxy + "https://fppdirectapi-prod.fuelpricesqld.com.au/Subscriber/GetCountryFuelTypes?countryId=21",
+            "method": "GET",
+            "headers": {
+                "Authorization": "xxxxxxxxxx",
+                "Content-Type": "application/json",
+                "cache-control": "no-cache",
+            },
+            "processData": false,
+            "data": ""
+
+        }
+
         // create map object and set up the options
+        var geocoder;
         var myMap;
+
         function initMap() {
+        geocoder = new google.maps.Geocoder();
+
             myMap = new google.maps.Map(document.getElementById('map'), {
                 center: {
                     lat: -26.693871,
                     lng: 153.090645
+
                 },
                 zoom: 14
             });
         }
 
         // for query and marker function
-
         var resPrices, resDetails, SiteMergedData
 
-        function loadMarkers(resPrices, resDetails) {
+        function showMarkers(resPrices, resDetails) {
             SiteMergedData = resPrices.map(x => Object.assign(x, resDetails.find(y => y.S == x.SiteId)));
-            initMap();
+
+           // custom icon setting
+            var icon = {
+                url: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Creative-Tail-Objects-gas-station.svg/964px-Creative-Tail-Objects-gas-station.svg.png",
+                labelOrigin:  new google.maps.Point(11, 20),
+                scaledSize: new google.maps.Size(32, 32),
+                origin: new google.maps.Point(0, 0),
+                anchor: new google.maps.Point(0, 0),
+            }
             for (var i = 0; i < SiteMergedData.length; i++) {
                 var lat = SiteMergedData[i].Lat;
                 var lng = SiteMergedData[i].Lng;
                 var ttl = SiteMergedData[i].N;
                 var transactiondate = SiteMergedData[i].TransactionDateUtc;
-                var price = SiteMergedData[i].Price;
+                var price = SiteMergedData[i].Price / 1000;
                 var latLng = new google.maps.LatLng(lat, lng);
 
                 var marker = new google.maps.Marker({
                     position: latLng,
                     map: myMap,
-                    title: ttl + '\n' + '\n' + price + '\n' + '\n' + "Price Updated: " + transactiondate
+                    draggable: false,
+                    // you can comment the folowing line to try without custom icon
+                    icon: icon,
+                    zIndex: -5,
+                    // label on marker
+                    label: {
+                        text: price.toString(),
+                        color: "#fff",
+                        fontSize: "7px",
+                        fontWeight: "400",
+                        zIndex: "2"
+                    },
+                    title: ttl + '\n' + '\n' + selectedFuelName + ":  " + price + '\n' + '\n' + "Price Updated: " + transactiondate
                 });
             }
         }
 
-        $(document).ready(function() {
-
-            // parallel loading
-            $.when($.ajax(sitedetails), $.ajax(siteprices)).done(function( getSiteDetails, getSitePrices ) {
-
-                // getSiteDetails and getSitePrices are arguments resolved for the first and the second ajax requests, respectively.
+        function loadMarkers() {
+              // parallel loading ... does not increase speed significantly.. look at caching
+              var start = new Date().getTime();
+               $.when($.ajax(sitedetails), $.ajax(siteprices)).done(function( getSiteDetails, getSitePrices ) {
+                // getSiteDetails and getSitePrices are arguments resolved for the page1 and page2 ajax requests, respectively.
                 // Each argument is an array with the following structure: [ data, statusText, jqXHR ]
-
                 if (getSitePrices[1].toString() == 'success' && getSiteDetails[1].toString() == 'success') {
-                    loadMarkers(getSitePrices[0].SitePrices, getSiteDetails[0].S);
-                }
+                    showMarkers(getSitePrices[0], getSiteDetails[0].S);
+                };
+                timeInterval = new Date().getTime() - start;
+                console.log(timeInterval + ' ms');
             });
+        }
+
+        function loadFuelTypes() {
+            var html_code = '';
+            $.getJSON(fueltype, function(data) {
+                $.each(data.Fuels, function(key, value) {
+                    if (key == 0) {
+                        selectedFuilId = value.FuelId;
+                        selectedFuelName = value.Name;
+                    }
+                    html_code += '<option value ="' + value.FuelId + '">' + value.Name + '</option>';
+
+                });
+                $('#fuels').html(html_code);
+            });
+        }
+
+        $(document).ready(function() {
+            loadFuelTypes();
+            loadMarkers()
         });
 
+
+
         $("#submit").click(function() {
-            var QLDSuburbs = document.getElementById("QLDSuburbs").value;
+            <!--var QLDSuburbs = document.getElementById("QLDSuburbs").value;-->
+            console.log(QLDSuburbs)
+            codeAddress()
+        });
+
+        function codeAddress(QLDSuburbs) {
+              var address = document.getElementById("QLDSuburbs").value;
+              geocoder.geocode({
+                'address': address
+              }, function(results, status) {
+                if (status == google.maps.GeocoderStatus.OK) {
+                  myMap.setCenter(results[0].geometry.location);
+                  var marker = new google.maps.Marker({
+                    myMap: myMap,
+                    position: results[0].geometry.location
+                  });
+                  var request = {
+                    location: results[0].geometry.location,
+                    radius: 1000,
+
+                  }
+
+                  var service = new google.maps.places.PlacesService(map);
+                  service.nearbySearch(request, callback);
+                } else {
+                  alert("Geocode was not successful for the following reason: " + status);
+                }
+              });
+            }
+
+        // loading data on fuel type select
+        $('#fuels').change(function() {
+            selectedFuilId = $(this).val();
+            selectedFuelName = $(this).find("option:selected").text();
+            loadMarkers();
         });
 
     </script>
